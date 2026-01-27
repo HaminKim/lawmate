@@ -1,15 +1,28 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export async function POST(req: Request) {
   try {
     const { prompt, caseType } = await req.json();
 
     if (!prompt) return NextResponse.json({ error: "질문 내용이 없습니다." }, { status: 400 });
+
+    // 1. 환경변수 확실하게 가져오기 (디버깅용 로그 추가)
+    const apiKey = process.env.OPENAI_API_KEY;
+    const assistantId = process.env.ASSISTANT_ID;
+
+    console.log("--- 환경 변수 체크 ---");
+    console.log("API Key 존재 여부:", !!apiKey); // true가 나와야 함
+    console.log("Assistant ID 값:", assistantId); // 실제 ID가 찍혀야 함
+
+    if (!apiKey || !assistantId) {
+      return NextResponse.json({ 
+        error: "서버 설정 오류: API Key 또는 Assistant ID가 없습니다." 
+      }, { status: 500 });
+    }
+
+    // 2. OpenAI 클라이언트 생성 (함수 내부에서 생성)
+    const openai = new OpenAI({ apiKey: apiKey });
 
     console.log("1. 스레드 생성 중...");
     const thread = await openai.beta.threads.create();
@@ -34,11 +47,11 @@ export async function POST(req: Request) {
       `
     });
 
-    console.log("3. AI 비서 실행 및 대기 중... (createAndPoll)");
-    // ⭐ 여기가 핵심: 공식 함수가 알아서 완료될 때까지 기다려줍니다.
+    console.log("3. AI 비서 실행 및 대기 중... (ID 사용)");
+    
+    // ⭐ 수정된 부분: 위에서 검증한 변수(assistantId)를 직접 사용
     const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
-      assistant_id: process.env.ASSISTANT_ID,
-      // response_format: { type: "json_object" } // 혹시 에러나면 이 줄은 주석 처리 유지
+      assistant_id: assistantId, 
     });
 
     console.log("4. 실행 완료. 상태:", run.status);
@@ -70,7 +83,6 @@ export async function POST(req: Request) {
         });
       }
     } else {
-      // 실패 시 (run.last_error 등을 확인 가능)
       console.error("AI 실행 실패:", run.last_error);
       return NextResponse.json({ error: `AI 처리 실패: ${run.status}` }, { status: 500 });
     }
