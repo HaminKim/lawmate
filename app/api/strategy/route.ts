@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// ⚠️ OpenAI 객체 생성을 함수 내부로 옮겨서 빌드 에러를 방지합니다.
 
 export async function POST(req: Request) {
   try {
@@ -12,9 +10,27 @@ export async function POST(req: Request) {
 
     if (!prompt) return NextResponse.json({ error: "내용이 없습니다." }, { status: 400 });
 
+    // 1. 환경변수 확실하게 가져오기 (디버깅용 로그 추가)
+    // Vercel에 등록한 이름(ASSISTANT_ID)과 똑같아야 합니다!
+    const apiKey = process.env.OPENAI_API_KEY;
+    const assistantId = process.env.ASSISTANT_ID;
+
+    console.log("--- [Strategy] 환경 변수 체크 ---");
+    console.log("API Key 존재 여부:", !!apiKey);
+    console.log("Assistant ID 값:", assistantId);
+
+    if (!apiKey || !assistantId) {
+      return NextResponse.json({ 
+        error: "서버 설정 오류: API Key 또는 Assistant ID가 없습니다." 
+      }, { status: 500 });
+    }
+
+    // 2. OpenAI 클라이언트 생성 (함수 내부에서 생성)
+    const openai = new OpenAI({ apiKey: apiKey });
+
     let thread;
 
-    // 1. 기존 대화면 그 방(Thread)을 쓰고, 아니면 새로 만듦
+    // 3. 기존 대화면 그 방(Thread)을 쓰고, 아니면 새로 만듦
     if (threadId) {
       console.log(`🔗 대화 이어가기 (Thread ID: ${threadId})`);
       thread = { id: threadId };
@@ -23,7 +39,7 @@ export async function POST(req: Request) {
       thread = await openai.beta.threads.create();
     }
 
-    // 2. 메시지 전송
+    // 4. 메시지 전송
     await openai.beta.threads.messages.create(thread.id, {
       role: "user",
       content: `
@@ -47,10 +63,14 @@ export async function POST(req: Request) {
       `
     });
 
-    // 3. 실행
+    console.log("5. AI 비서 실행 및 대기 중... (createAndPoll)");
+    
+    // ⭐ 수정된 부분: 위에서 검증한 변수(assistantId)를 직접 사용
     const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
-      assistant_id: process.env.ASSISTANT_ID,
+      assistant_id: assistantId,
     });
+
+    console.log("6. 실행 완료. 상태:", run.status);
 
     if (run.status === 'completed') {
       const messages = await openai.beta.threads.messages.list(thread.id);
@@ -61,6 +81,7 @@ export async function POST(req: Request) {
         responseText = lastMessage.content[0].text.value;
       }
 
+      // 청소 작업
       responseText = responseText.replace(/【.*?】/g, '').replace(/```json/g, "").replace(/```/g, "").trim();
 
       try {
@@ -68,6 +89,7 @@ export async function POST(req: Request) {
         // ⭐ 결과와 함께 threadId도 돌려줍니다 (다음에 또 쓰라고)
         return NextResponse.json({ result, threadId: thread.id });
       } catch (e) {
+        console.error("JSON 파싱 실패, 원본 반환");
         // 파싱 실패 시에도 원문은 줍니다
         return NextResponse.json({ 
             result: { analysis: responseText, options: [], risk: "-", laws: [], recommendation: "-" },
@@ -79,6 +101,7 @@ export async function POST(req: Request) {
     }
 
   } catch (error: any) {
+    console.error("서버 에러 발생:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
