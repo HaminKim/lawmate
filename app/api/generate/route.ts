@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     console.log("3. AI 비서 실행 및 대기 중... (createAndPoll)");
     // ⭐ 여기가 핵심: 공식 함수가 알아서 완료될 때까지 기다려줍니다.
     const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
-      assistant_id: process.env.OPENAI_ASSISTANT_ID!,
+      assistant_id: process.env.ASSISTANT_ID!,
       // response_format: { type: "json_object" } // 혹시 에러나면 이 줄은 주석 처리 유지
     });
 
