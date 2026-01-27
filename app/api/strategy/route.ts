@@ -49,7 +49,7 @@ export async function POST(req: Request) {
 
     // 3. 실행
     const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
-      assistant_id: process.env.ASSISTANT_ID!,
+      assistant_id: process.env.ASSISTANT_ID,
     });
 
     if (run.status === 'completed') {
